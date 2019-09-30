@@ -294,8 +294,7 @@ rm(scfa_indv)
 scfa_indv <- read_excel("raw_data/SCFA_data.xlsx",
                         sheet = "SCFA_indv", col_names = TRUE, trim_ws = TRUE, 
                         na = c("", "NA", "-----")) 
-    
-scfa_indv_qc <- scfa_indv %>%
+ scfa_indv_qc <- scfa_indv %>%
   rename_all(tolower) %>%
   rename(sample_wt_g = tube_wt) %>%
   rename(acetate_mM = ace, 
@@ -308,10 +307,10 @@ scfa_indv_qc <- scfa_indv %>%
   filter(sample_wt_g > 0.10) %>% 
   filter(sample_wt_g < 1.0) %>% 
   filter(notes != "frozen>24hrs") %>%
-  mutate(sample_wt_kg = sample_wt_g * 1000) %>%
-  mutate(acetate_mM_per_kg = acetate_mM / sample_wt_kg) %>%
-  mutate(butyrate_mM_per_kg = butyrate_mM / sample_wt_kg) %>%
-  mutate(propionate_mM_per_kg = propionate_mM / sample_wt_kg) %>%
+  mutate(sample_wt_kg = sample_wt_g / 1000) %>%
+  mutate(acetate_mM_per_kg = (acetate_mM*.002) / sample_wt_kg) %>%
+  mutate(butyrate_mM_per_kg = (butyrate_mM*.002) / sample_wt_kg) %>%
+  mutate(propionate_mM_per_kg = (propionate_mM*.002) / sample_wt_kg) %>%
   mutate(total_scfa_mM_per_kg = propionate_mM_per_kg + butyrate_mM_per_kg + acetate_mM_per_kg) %>%
   mutate(acetate_mM_per_kg_rounded = round(acetate_mM_per_kg, 2)) %>%
   mutate(butyrate_mM_per_kg_rounded = round(butyrate_mM_per_kg, 2)) %>%
