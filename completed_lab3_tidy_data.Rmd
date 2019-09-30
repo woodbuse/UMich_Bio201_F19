@@ -352,18 +352,18 @@ Import the scfa_wkly data from the Excel file. Complete the following QC measure
 * Calculate the mean and median total SCFAs
 
 ```{r}
-scfa_wkly_qc <- read_excel("raw_data/SCFA_wkly.xlsx", sheet = "SCFA_wkly", col_names = TRUE, trim_ws = TRUE, na = c("", "NA", "-----")) %>% 
+scfa_wkly_qc <- read_excel("raw_data/SCFA_data.xlsx", sheet = "SCFA_wkly", col_names = TRUE, trim_ws = TRUE, na = c("", "NA", "-----")) %>% 
   rename_all(tolower) %>%
-  rename(acetate_mM_median = acetate_median, 
-         acetate_mM_mean = acetate_mean,
-         butyrate_mM_median = butyrate_median, 
-         butyrate_mM_mean = butyrate_mean,
-         propionate_mM_median = propionate_median, 
-         propionate_mM_mean = propionate_mean,) %>%
+  rename(acetate_mM_per_kg_median = acetate_median, 
+         acetate_mM_per_kg_mean = acetate_mean,
+         butyrate_mM_per_kg_median = butyrate_median, 
+         butyrate_mM_per_kg_mean = butyrate_mean,
+         propionate_mM_per_kg_median = propionate_median, 
+         propionate_mM_per_kg_mean = propionate_mean,) %>%
   filter(study_week == "week1" | study_week == "week3") %>%
   filter(quantity_compliant == "yes") %>%
-  mutate(mean_total_scfa = (acetate_mM_mean + butyrate_mM_mean + propionate_mM_mean)) %>%
-  mutate(median_total_scfa = (acetate_mM_median + butyrate_mM_median + propionate_mM_median))
+  mutate(mean_total_scfa = (acetate_mM_per_kg_mean + butyrate_mM_per_kg_mean + propionate_mM_per_kg_mean)) %>%
+  mutate(median_total_scfa = (acetate_mM_per_kg_median + butyrate_mM_per_kg_median + propionate_mM_per_kg_median))
 ```
 
 
