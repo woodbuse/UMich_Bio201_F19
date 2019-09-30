@@ -364,7 +364,7 @@ scfa_wkly_qc <- read_excel("raw_data/SCFA_wkly.xlsx", sheet = "SCFA_wkly", col_n
   filter(study_week == "week1" | study_week == "week3") %>%
   filter(quantity_compliant == "yes") %>%
   mutate(mean_total_scfa = (acetate_mM_mean + butyrate_mM_mean + propionate_mM_mean)) %>%
-  mutate(mean_total_scfa = (acetate_mM_median + butyrate_mM_median + propionate_mM_median))
+  mutate(median_total_scfa = (acetate_mM_median + butyrate_mM_median + propionate_mM_median))
 ```
 
 
