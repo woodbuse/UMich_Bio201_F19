@@ -1,0 +1,570 @@
+---
+title: "Lab 6"
+author: "Seth Woodbury"
+date: "10/21/2019"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_knit$set(root.dir = "~/Desktop/UMich_Bio201_F19/")
+```
+
+# Load packages
+```{r Load packages, eval=TRUE, echo=TRUE, message=FALSE, warning=FALSE, results='hide'}
+library(tidyverse)
+library(readxl)
+library(broom)
+library(cowplot)
+library(agricolae)
+set.seed(7)
+```
+
+# Import data
+
+### Import + format SCFA data
+
+Import the SCFA data frame from last week. Update the columns names to match the course's style, set the order of the semesters by converting from character to factor. 
+
+```{r include=FALSE}
+scfa_long <- read_delim("Lab5/curated_data/SCFA_wkly_long.txt", 
+                        delim = "\t", col_names = TRUE, trim_ws = TRUE, na = c("NA")) %>%
+  rename_all(tolower) %>%
+  select(-ends_with("median")) %>% 
+  mutate(totalscfa_mean = acetate_mean + butyrate_mean + propionate_mean,
+         semester = factor(semester,
+                           levels=c("Winter2015", "Fall2015", 
+                                    "Winter2016", "Fall2016", 
+                                    "Winter2017", "Fall2017", 
+                                    "Winter2018", "Fall2018", 
+                                    "Winter2019"), ordered = TRUE)) %>%
+  filter(quantity_compliant == "yes")
+```
+
+### Import tax data 
+
+Import the taxonomic table `person_week_mean_by_cat_w_phylum.csv`. Notice the extension is csv, the delimitor in this file is a comma instead of a tab (which is different from what we have worked with previously). 
+```{r}
+# taxanomic data
+taxa_category <- read_delim("Lab6/raw_data/person_week_mean_by_cat_w_phylum.csv",
+                            delim = ",", escape_double = FALSE, 
+                            trim_ws = TRUE, na=c("NA"),
+                            col_types = list())
+View(taxa_category)
+```
+
+Look at the data frame, notice the week and semester formats are different then the rest of our data files. Today we are going to do some correlations between taxon abundance and short chain fatty acid (SCFA) concentrations. If we want to join these two data sets we will need make sure the format of these variables are the same. 
+
+### Format tax data
+```{r}
+# create duplicate of data frame
+taxa_cat_curated <- taxa_category %>%
+  rename_all(tolower) %>%
+  rename(participant_id = person,
+         study_week = week,
+         relative_abundance = fract) %>%
+  select(participant_id, study_week, semester, tax_id, relative_abundance, phylum, tax_name, category)
+
+# update week format 
+taxa_cat_curated[["study_week"]] <- recode(.x=taxa_cat_curated[["study_week"]], 
+                                  "week_1"="week1")
+taxa_cat_curated[["study_week"]] <- recode(.x=taxa_cat_curated[["study_week"]], 
+                                  "week_3"="week3")
+# update semester format
+taxa_cat_curated[["semester"]] <- recode(.x=taxa_cat_curated[["semester"]], 
+                                  "2015w"="Winter2015")
+taxa_cat_curated[["semester"]] <- recode(.x=taxa_cat_curated[["semester"]], 
+                                  "2015f"="Fall2015")
+taxa_cat_curated[["semester"]] <- recode(.x=taxa_cat_curated[["semester"]], 
+                                  "2016w"="Winter2016")
+taxa_cat_curated[["semester"]] <- recode(.x=taxa_cat_curated[["semester"]], 
+                                  "2016f"="Fall2016")
+taxa_cat_curated[["semester"]] <- recode(.x=taxa_cat_curated[["semester"]], 
+                                  "2017w"="Winter2017")
+taxa_cat_curated[["semester"]] <- recode(.x=taxa_cat_curated[["semester"]], 
+                                  "2017f"="Fall2017")
+taxa_cat_curated[["semester"]] <- recode(.x=taxa_cat_curated[["semester"]], 
+                                  "2018w"="Winter2018")
+taxa_cat_curated[["semester"]] <- recode(.x=taxa_cat_curated[["semester"]], 
+                                  "2018f"="Fall2018")
+taxa_cat_curated[["semester"]] <- recode(.x=taxa_cat_curated[["semester"]], 
+                                  "2019w"="Winter2019")
+
+# Save a copy of the curated data frame
+write_delim(taxa_cat_curated, path="Lab6/curated_data/taxa_cat_curated.csv",
+            delim = ",", quote = FALSE, col_names = TRUE)
+
+View(taxa_cat_curated)
+```
+
+The cleaned-up `taxa_cat_curated` contains a subset of organisms found in the gut, specifically organisms which consume or produce metabolites of interest. The `tax_id` column is a number assigned to a sequence during the sequence processing pipeline. You won't need to use these right now. The `relative_abundance` column contains the frequencey of the organisms in each participant. The frequency is the weekly mean of (# sequences for each tax_id) / (total sequences per sample) for each participant. The `tax_name` is the most likely identity of each sequence. Information regarding microbial metabolism is in the `category` column:
+
+* RS_degraders = Resistant starch degrading specialists (Bifidobacterium + Ruminococcus bromii)
+* butyrogen_focused = A focused list of the most common / canonical butyrogens
+* butyrogen_flint = A broader list of butyrogenic organisms (information comes from Harry Flint's research)
+* hydrogen_consumers = Hydrogen consumers
+* hydrogen_gen = Hydrogen generators
+* propionate_gen = Propionate generators (essentially Bacteroides)
+
+### Join SCFA + tax data
+
+In the latter half of this lab we are going to test correlations. To test correlations between taxa and their metabolites, we need to join the data frames containing these data. Join the `tax_cat_curated` and `scfa_long` data frames. Remember to check the number of rows and participants in each data frame to help you select the best type of join. Discuss your decision with your neighbor, did you choose the same type of join? 
+Inner join is the best because there are a lot of participants who do not have the full sets of data and we only want the ones with all the data. So inner join will ensure we only have participants with taxa and molecular data.
+```{r}
+#check number of rows
+nrow(taxa_cat_curated) 
+nrow(scfa_long) 
+
+#check number of participants 
+n_distinct(taxa_cat_curated$participant_id) 
+n_distinct(scfa_long$participant_id) 
+
+#identify shared columns = ?
+colnames(taxa_cat_curated) 
+colnames(scfa_long)
+```
+
+```{r}
+tax_scfa <- inner_join(scfa_long, taxa_cat_curated,
+                 by = c("participant_id", "study_week", "semester" ))
+View(tax_scfa)
+```
+
+# Intro
+
+Last week we discussed the factors influencing data structure (sample size, varaince), how to check assumptions for statistical tests, how to determine if the differences between two means (t-tests, Mann-Whitney-U) or more (ANOVA) are likely real, and what to do if your dataset does not meet the assumptions when comparing two means (non-parametric). 
+
+In the first portion of the lab we will review the assumption checking process for comparison of more than 2 means, use the non-pararmetric counterpart to ANOVA (Kruskall-Wallace), and learn what to do if your ANOVA (or Kruskall-Wallace) test has a significant result. This will complete our section on categorical/discrete vs. continuous variables. The second half of the lab will discuss how to plot and analyze continuous vs. countinuous variables.
+
+### Checking assumptions
+
+Remember the assumptions for an ANOVA are similar to a t-test (large-ish sample size, normal distribution, equal variances). 
+
+```{r eval=FALSE, include=FALSE}
+# sample size of each group
+group_by() %>% summarize(sample_size = n())
+
+# check normality of each group
+shaprio.test()
+histogram()
+
+# check variances
+bartlett.test()
+```
+
+Last week each ANOVA you conducted should have resulted in a non-significant result (approx p >= 0.15). Run the code for the plot and ANOVA below. 
+
+```{r}
+# know assumptions are already met
+scfa_long %>%
+  filter(study_week == "week1") %>%
+  ggplot(aes(x = semester,
+             y = butyrate_mean, 
+             color = semester)) +
+  geom_violin() + 
+  geom_jitter() + 
+  xlab(NULL) +
+  ylab("Week 1 butyrate (mmol/kg)") + 
+  theme(legend.position = "none",
+        axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1))
+
+# ANOVA 
+aov_wk1 <- aov(butyrate_mean ~ semester, scfa_long)
+summary(aov_wk1)
+```
+
+Here we have a small p-value, this means at least one of our groups is significantly different from the others. To identify which group is different we have to run a pos-hoc test (an additional test). We will use Tukey's Honestly Significant Difference (HSD).
+
+```{r}
+# conduct Tukey's HSD test 
+tuk_wk1 <- tidy(TukeyHSD(aov_wk1)) %>%
+  mutate(adj.p.value = round(adj.p.value, digits = 2)) %>%
+  filter(adj.p.value <= 0.10) #filter Tukey output for significant results 
+
+# save data frame of results to file 
+write_delim(tuk_wk1, path = "~/Desktop/UMich_Bio201_F19/Lab6/curated_data/tuk_wk1.txt",
+            delim = "\t", col_names = TRUE, quote = FALSE)
+
+tuk_wk1
+```
+
+### Kruskall-Wallace
+
+If you have a data set that is clearly non-normal (such as the breath methane data), and want to ask a similar question as we asked with ANOVAs last week (e.g., Does the breath methane differ during week 3 for individuals consuming different supplements?), we need to use a non-parametric test. The non-parametric companion to an ANOVA is the Kruskall-Wallace test. 
+
+Last week you should have checked assumptions on breath methane and determined that it was non-normal, so an ANOVA would not be an appropriate test to use to determine if the week 3 breath methane concentrations differed between supplements consumed.
+
+```{r}
+# import methane data 
+breath_wkly <- read_delim("~/Desktop/UMich_Bio201_F19/Lab5/curated_data/breath_wkly.txt", 
+                        delim = "\t", col_names = TRUE, trim_ws = TRUE, na = c("NA")) %>%
+# format methane data
+  rename_all(tolower) %>%
+  filter(study_week == "week3",
+         quantity_compliant == "yes") %>% #remove non-compliant individuals
+  mutate(semester = factor(semester,
+                           levels=c("Winter2015", "Fall2015", 
+                                    "Winter2016", "Fall2016", 
+                                    "Winter2017", "Fall2017", 
+                                    "Winter2018", "Fall2018", 
+                                    "Winter2019"), ordered = TRUE))
+# plot
+breath_wkly %>%
+  ggplot(aes(x = supplement_consumed, 
+             y = ch4_mean, 
+             color = supplement_consumed)) + 
+  geom_violin() + 
+  geom_jitter() + 
+  xlab(NULL) + 
+  ylab("Breath methane (ppm)") + 
+  theme(legend.position = "none",
+        axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1))
+
+# run the test
+kruskal.test(supplement_consumed ~ ch4_mean, breath_wkly)
+```
+
+The interpretation for Kruskall-Wallace is similar to an ANOVA; small p-value indicates at least one group is different from the others. 
+
+### Homework 6.1
+
+* Write hypotheses to answer the question; do hydrogen breath levels differ between participants consuming fiber supplements? Create a plot of hydrogen levels:
+```{r}
+# hypothesis: Hydrogen breath levels do not differ between participants consuming different fiber supplements.
+
+# plot 
+breath_wkly %>%
+  ggplot(aes(x = supplement_consumed, 
+             y = h2_mean, 
+             color = supplement_consumed)) + 
+  geom_violin() + 
+  geom_jitter() + 
+  xlab(NULL) + 
+  ylab("Breath methane (ppm)") + 
+  theme(legend.position = "none",
+        axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1))
+```
+
+* Which assumptions need checked for the statistical test(s)? Check the assumptions in the space below:
+  *n is greater than or equal to 30 for each group
+  *each data set is approximately normal
+  *variences are about the same
+```{r}
+#Sample size
+breath_wkly %>%
+  group_by(supplement_consumed) %>% summarize(sample_size = n())
+# Accessible, Arabino, BRMPS+Accessible, HiMaize+BRMPS, LOODAT, & Psyllium do not quite satisfy but we may be able to proceed if the data is normal and variences are equal
+
+#Normality
+shapiro.test(breath_wkly$h2_mean)
+breath_wkly %>%
+ggplot(aes(x = h2_mean)) + geom_histogram()
+# The data is incredibly skewed and it would not be very safe to use a ANOVA or parametric test, and to support us the shapiro test gives us a low p-value to confirm our suspicions
+
+#Variences
+bartlett.test(h2_mean ~ supplement_consumed, data = breath_wkly)
+#There is no homogeneity of variences because of a small p-value
+```
+
+* Which statistical test(s) would you use to answer the question? Conduct the appropriate statistical test(s): Non-parametric
+```{r}
+kruskal.test(supplement_consumed ~ h2_mean, breath_wkly)
+```
+
+* What is the answer to the question? Write your conclusions:
+```{r}
+# conclusion: Since we have a large p-value, we do not have enough evidence to reject our null hypothesis and accept the alternative. Thus, we must conclude that there is no significant difference in mean Hydrogen Breath levels for individuals taking different fiber supplements.
+```
+
+# Correlations
+
+Correlations are used to determine if there is a relationship between two continuous variables. For the questions we are interested in, determining if there is a monotonic (or linear) relationship will provide insight. A monotonic relationship would occur when both continuous variables increase or decrease simultaneously, or when one variable increases the other decreases. 
+
+To test correlations in this course, we are going to use the best practice approach of linear models (lm). However we do want to point out other correlation tests in case you encounter them elsewhere (Pearson which is parametric and Spearman Rank with is non-parametric). These tests have assumptions which are easy to violate, and the statistics provided (p and R values) do not have a straightfoward interpretation.
+
+### Plot 2 continuous variables
+
+To plot two continuous variables we will use a combination of geom_point() and geom_smooth(). 
+
+```{r}
+tax_scfa %>%
+  filter(category == "butyrogen_focused",
+         study_week == "week3",
+         supplement_consumed == "HiMaize") %>%
+  ggplot(aes(x = butyrate_mean,
+             y = relative_abundance)) + 
+  geom_point() + #puts data points to match x and y coordinates
+  geom_smooth(method = "lm", #used to create a linear best fit line
+              se = FALSE) + #hides confidence interval around line 
+  xlab("Week 3 mean butyrate (mmol/kg)") + 
+  ylab("Relative abundance") 
+```
+
+You plot two continuous variables and they appear to be correlated, you can determine if they are correlated by building a linear model. 
+
+### Linear models
+
+The linear model function is lm(). The linear models we will use have similar arguments as running an ANOVA. You must have the two variables (x and y) and a data frame in which each variable is a column. To access the results of the model, assign it to a new object. In the example below we will determine if there is a correlation between butyrate concentration and the abundance of some butyrate producing organisms. 
+
+```{r}
+m1 <- tax_scfa %>%
+  filter(category == "butyrogen_focused", #subset dataframe to butyrate producers
+         study_week == "week3", #subset for week3
+         supplement_consumed == "HiMaize") %>% #subset for HiMaize consumers 
+  lm(butyrate_mean ~ relative_abundance, data = .) #test relationship
+summary(m1) #view results 
+tax_scfa
+```
+
+Look at the p-value in the same line as the F-statistic, this tells us if there is a significant result. This p-value is high (p-value = 0.2959), so we do not have significance. However if it was significant, we would then look at the adjusted R-squared value which indicates the quality of linear fit (higher R-squared is better >=0.8).
+
+### Homework 6.2
+
+Use the `tax_scfa` data frame, calculate the ratio of each SCFA in a new column (scfa/total). Check that your ratios sum to 1. 
+
+```{r}
+scfa_ratio <- tax_scfa %>%
+  mutate(acetate_ratio = acetate_mean / totalscfa_mean) %>% 
+  mutate(butyrate_ratio = butyrate_mean / totalscfa_mean) %>% 
+  mutate(propionate_ratio = propionate_mean / totalscfa_mean) %>%
+  mutate(ratio_check = propionate_ratio + butyrate_ratio + acetate_ratio)
+scfa_ratio
+```
+
+Calculate the ratios of Firmicutes to Bacteroidetes (Firmicutes abund / Bacteroidetes abundance).
+
+```{r}
+# filter for Firmicutes, calculate sum per person per week (firmicutes_abund)
+Fr <- scfa_ratio %>%
+  filter(phylum == "Firmicutes") %>%
+  group_by(participant_id, study_week, semester, frequency, supplement_consumed) %>%
+  summarise(firmicutes_abund = sum(relative_abundance))
+Fr
+# filter for Bacteroidetes, calculate sum per person per week (bacteroidetes_abund)
+Br <- scfa_ratio %>%
+  filter(phylum == "Bacteroidetes <phylum>") %>%
+  group_by(participant_id, study_week, semester, frequency) %>%
+  summarise(bacteroidetes_abund = sum(relative_abundance))
+Br
+# join subsetted data frames
+tax_ratio <- inner_join(Fr, Br) %>%
+  mutate(f_b_ratio = (firmicutes_abund / bacteroidetes_abund)) %>% #calculate ratios
+  inner_join(scfa_ratio) #join with scfa_ratio data frame
+tax_ratio
+```
+save_plot(filename = "UMich_Bio201_F19/Lab6/figures/", plot = but_vs_firm_plot,)
+### Homework 6.3
+Determine if there is a relationship between the butyrate concentration and Firmicutes abundance. Conduct the statistical test and generate a plot. Save plot to folder within lab 6 called 'figures'.
+```{r}
+# plot
+but_vs_firm <- tax_ratio %>%
+  ggplot(aes(x = butyrate_mean,
+             y = firmicutes_abund)) + 
+   geom_point() + #puts data points to match x and y coordinates
+  geom_smooth(method = "lm", #used to create a linear best fit line
+              se = FALSE) + #hides confidence interval around line 
+labs(    x = "Butyrate Mean",
+         y = "Firmicutes Abundance")
+  but_vs_firm_plot
+
+save_plot(filename = "UMich_Bio201_F19/Lab6/figures/but_vs_firm.pdf", plot = but_vs_firm)
+
+
+# correlation test 
+m63a <- tax_ratio %>%
+  lm(butyrate_mean ~ firmicutes_abund, data = .) #test relationship
+
+summary(m63a) #view results 
+
+#There does not appear to be much of a correlation at all as indicated by the random scatter on the graph and low correlation value (r) telling us that the graph is linear and is in fact not correlated.
+```
+
+Do you draw the same conclusions if you use the butyrate ratio and Firmicutes to Bacteroidetes ratio (f_b_ratio)?
+```{r}
+# plot
+but_ratio_vs_f_b_ratio <- tax_ratio %>%
+  ggplot(aes(x = butyrate_ratio,
+             y = f_b_ratio)) + 
+   geom_point() + #puts data points to match x and y coordinates
+  geom_smooth(method = "lm", #used to create a linear best fit line
+              se = FALSE) + #hides confidence interval around line 
+labs(    x = "Butyrate Ratio",
+         y = "Firmicutes to Bacteroidetes Ratio")
+  but_ratio_vs_f_b_ratio
+
+save_plot(filename = "UMich_Bio201_F19/Lab6/figures/but_ratio_vs_f_b_ratio.pdf", plot = but_ratio_vs_f_b_ratio)
+
+# correlation test 
+m63b <- tax_ratio %>%
+  lm(butyrate_ratio ~ f_b_ratio, data = .)
+
+summary(m63b) #view results 
+
+# There appears to be a slight bit more of a correlation on the graph, but hardly anything still and the low correlation (r) confirms this as a low correlation indicates no direct linear relationship.
+```
+
+### Homework 6.4
+Determine if there is a relationship between the propionate concentration and Bacteroidetes abundance. Conduct the statistical test and generate a plot. Save the plot.
+```{r}
+pro_vs_bact <- tax_ratio %>%
+  ggplot(aes(x = propionate_ratio,
+             y = bacteroidetes_abund)) + 
+   geom_point() + #puts data points to match x and y coordinates
+  geom_smooth(method = "lm", #used to create a linear best fit line
+              se = FALSE) + #hides confidence interval around line 
+labs(    x = "Propionate Concentration",
+         y = "Bacteroidetes Abundance")
+  pro_vs_bact
+
+save_plot(filename = "UMich_Bio201_F19/Lab6/figures/pro_vs_bact.pdf", plot = pro_vs_bact)
+
+# correlation test 
+m63c <- tax_ratio %>%
+  lm(propionate_ratio ~ bacteroidetes_abund, data = .)
+
+summary(m63c) #view results 
+
+```
+
+Do you draw the same conclusions if you use the propionate ratio and Firmicutes to Bacteroidetes ratio?
+```{r}
+# Indeed we got very similar results. The correlation between propionate concentration and Bacteroidetes abundance was small and slightly positive just like the other two, the coefficient of determination (r squared) was so small that it is best to interpret these variables as not directly related (linear).
+```
+
+### Homework 6.5
+Import the curated pH+BSS data you generated during Lab4. Join the pH data frame with the tax_ratio data frame.
+```{r}
+# import 
+pH_BSS_wkly <- read_delim(file = "Lab4/curated_data/pH_BSS_wkly.txt",
+                        delim = "\t", col_names = TRUE, trim_ws = TRUE, 
+                        na = c("", "NA"))
+
+# join 
+tax_scfa_pH <- inner_join(tax_ratio, pH_BSS_wkly) %>%
+  na.omit(semester)
+tax_ratio
+tax_scfa_pH
+```
+
+Determine if there is a relationship between total SCFAs and acetate. Conduct the statistical test and generate a plot. Save the plot to figures folder.
+```{r}
+scfa_vs_acetate <- tax_scfa_pH %>%
+  ggplot(aes(x = totalscfa_mean,
+             y = acetate_mean)) + 
+   geom_point() + #puts data points to match x and y coordinates
+  geom_smooth(method = "lm", #used to create a linear best fit line
+              se = FALSE) + #hides confidence interval around line 
+labs(    x = "Total SCFA Mean Concentration",
+         y = "Acetate Mean Concentration")
+scfa_vs_acetate
+
+save_plot(filename = "UMich_Bio201_F19/Lab6/figures/scfa_vs_acetate.pdf", plot = scfa_vs_acetate)
+
+# correlation test 
+m63d <- tax_scfa_pH %>%
+  lm(totalscfa_mean ~ acetate_mean, data = .)
+
+summary(m63d) #view results 
+
+#There is an extremely strong positive correlation between these two variables. The coefficient of determination is .8704 meaning that approximately 87% of the y-values present in this graph can be reasonably explained by the linear regression. We have significant evidence to conclude that there is a strong direct linear relationship between total SCFAs and acetate concentration
+```
+
+Do you draw the same conclusions if you use the total SCFAs and acetate ratio?
+```{r}
+scfa_vs_acetate_ratio <- tax_scfa_pH %>%
+  ggplot(aes(x = totalscfa_mean,
+             y = acetate_ratio)) + 
+   geom_point() + #puts data points to match x and y coordinates
+  geom_smooth(method = "lm", #used to create a linear best fit line
+              se = FALSE) + #hides confidence interval around line 
+labs(    x = "Total SCFA Mean Concentration",
+         y = "Acetate Ratio")
+scfa_vs_acetate_ratio
+
+save_plot(filename = "UMich_Bio201_F19/Lab6/figures/scfa_vs_acetate_ratio.pdf", plot = scfa_vs_acetate_ratio)
+
+# correlation test 
+m63e <- tax_scfa_pH %>%
+  lm(totalscfa_mean ~ acetate_ratio, data = .)
+
+summary(m63e) #view results 
+
+#Surprisingly, there does not appear to be a direct linear relationship between total SCFA and acetate ratio. The line of best fit shows a negative relationship if there were to be one, but our extremely low coefficient of determination (.01878) and random scatter on the graph do not give us enough evidence to prove that there is a direct negative relationship between these variables.
+```
+
+### Homework 6.6
+Determine if there is a relationship between total SCFAs and pH. Conduct the statistical test and generate a plot. Save the plot.
+```{r}
+scfa_vs_ph <- tax_scfa_pH %>%
+  ggplot(aes(x = totalscfa_mean,
+             y = average_ph)) + 
+  geom_point() + #puts data points to match x and y coordinates
+  geom_smooth(method = "lm", #used to create a linear best fit line
+              se = FALSE) + #hides confidence interval around line 
+labs(    x = "Total SCFA Mean Concentration",
+         y = "Mean pH")
+scfa_vs_ph
+
+save_plot(filename = "UMich_Bio201_F19/Lab6/figures/scfa_vs_ph.pdf", plot = scfa_vs_ph)
+
+# correlation test 
+m63f <- tax_scfa_pH %>%
+  lm(totalscfa_mean ~ average_ph, data = .)
+
+summary(m63f) #view results 
+
+#Again, there does not seem to be much of a direct linear relationship between total SCFAs and pH. Although the line of best fit is negative, which would indicate an opposite direct relationship, the graph displays a random scatter with no apparent trend and the coefficient of correlation is extremely low (.09942) which suggests that the relationship between these variables cannot be reasonably explained as direct linear.
+```
+
+### Homework 6.7
+Determine if there is a relationship between butyrate and pH. Conduct the statistical test and generate a plot. Save the plot.
+```{r}
+but_vs_ph <- tax_scfa_pH %>%
+  ggplot(aes(x = butyrate_mean,
+             y = average_ph)) + 
+  geom_point() + #puts data points to match x and y coordinates
+  geom_smooth(method = "lm", #used to create a linear best fit line
+              se = FALSE) + #hides confidence interval around line 
+labs(    x = "Butyrate Mean Concentration",
+         y = "Mean pH")
+but_vs_ph
+
+save_plot(filename = "UMich_Bio201_F19/Lab6/figures/but_vs_ph.pdf", plot = but_vs_ph)
+
+# correlation test 
+m63g <- tax_scfa_pH %>%
+  lm(butyrate_mean ~ average_ph, data = .)
+
+summary(m63g) #view results 
+
+#The line of best fit displays a negatively correlated relationship between these variables, but since the coefficient of determination is extremely small (.05209) then it is best that we do not describe the relationship between these variables as directly related (linear). 
+```
+
+### Homework 6.8
+Save each data frame generated today:
+
+* taxa_cat_curated
+* scfa_ratio
+* tax_scfa
+* tax_scfa_pH
+
+```{r}
+write_delim(taxa_cat_curated, 
+            path="Lab6/curated_data/taxa_cat_curated.txt",
+            delim = "\t", quote = FALSE, col_names = TRUE)
+
+write_delim(scfa_ratio, 
+            path="Lab6/curated_data/scfa_ratio.txt",
+            delim = "\t", quote = FALSE, col_names = TRUE)
+
+write_delim(tax_scfa, 
+            path="Lab6/curated_data/tax_scfa.txt",
+            delim = "\t", quote = FALSE, col_names = TRUE)
+
+write_delim(tax_scfa_pH, 
+            path="Lab6/curated_data/tax_scfa_pH.txt",
+            delim = "\t", quote = FALSE, col_names = TRUE)
+```
+
+-----
+end
