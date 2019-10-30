@@ -1,0 +1,481 @@
+---
+title: "Practical Fall 2019"
+author: "Seth Woodbury"
+date: "10/28/2019"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_knit$set(root.dir = "~/Desktop/UMich_Bio201_F19/Practical")
+```
+
+As with each lab, add "completed" to the Rmd filename; update the name in the author line above; update the location of the working directory as necessary. 
+
+# Load packages
+```{r Load packages, eval=TRUE, echo=TRUE, message=FALSE, warning=FALSE, results='hide'}
+library(tidyverse)
+library(readxl)
+library(broom)
+library(cowplot)
+set.seed(7)
+```
+
+# Part 1 - concepts 
+Type the answers to questions 1-5 in the space below. 
+
+### Question 1
+
+Given vector v1 below, will it be read as character or numeric? Why does this happen? [1 point]
+```{r}
+v1 <- c("one", "2", "three", "4")
+View(v1)
+```
+
+<This vector will always be read as character because there is text and paranthesis; the computer cannot perform calculations and make numerical sense out of letters, even if it spells out a word because the computer does not interpret languagistic meaning. Therefore, by default, it will convert everything to text (even actual numbers) because those numbers are useless in the prescence of text since we cannot perform a mean, for example, on letters and words. It follows the hiearchy where characters always trump numbers when combined.> 
+
+### Question 2
+
+dataframe1 has 323 rows and dataframe2 has 345 rows. After an inner join the resulting data fame has 312 rows. Why does the result have fewer rows? [1 point]
+
+<Inner joins takes out nonmatches in the sense that one particular row must have data for all the columns specified. Thus if there are NAs for any variable that is being merged, an inner join will take out that entire row of data. So in the context of this question, one or both data sets had NAs in a couple of rows whose variables were merged meaning that the inner join was forced to remove that row since it did not have data for all the variables merged. In addition, dataframe1 is smaller than dataframe2, which means that some dataframe2 specific measurements for a given variable in common between both dataframes (like participant_id) do not have a dataframe1 specific measurement meaning that there is an NA so those rows are removed completely.> 
+
+### Question 3
+
+What are the three assumptions for a t-test? Explain what to do if the variance assumption is violated. Explain what to do if the normality assumption is violated. [3 points]
+
+<The first assumption is that the data is or is approximately normal. 
+The second assumption is that we have a large data set (n >= 30).
+The last is that we have equal variences. 
+
+If there are not equal variences, we can still proceed with the t.test but we must indicate that the variences are not equal as var.equal = FALSE within the command for the t.test. 
+However if the normality assumption is violated with cannot proceed with the t.test which is parametric and instead must use a non-parametric test for means which is the wilcox.test.> 
+
+### Question 4
+
+You have a data frame (called butyrate_df) with the columns: "Participant_ID", "Study_week", "Semester", "Supplement_consumed", "Avg_butyrate". If this data frame is piped to each of the functions below, evaluate if the description of the results is true or false. [3 points]
+```{r eval=FALSE, include=FALSE}
+butyrate_df %>%
+  filter(Semester == "Fall2019")
+# Result1 = keeps only data from Fall 2019 semester
+
+butyrate_df %>%
+  filter(Avg_butyrate <= 47.0)
+# Result2 = keeps only values equal to 47 mmol/kg 
+
+butyrate_df %>%
+  group_by(Semester) %>%
+  summarize(New_column = median(Avg_butyrate))
+# Result3 = new_column contains the median of each participant 
+```
+
+<The first result is TRUE, as this filter subsets within the character vector for only rows with the same character as "Fall2019" or the Fall 2019 semester. 
+
+However, Result2 is FALSE becuase there is a "less than sign" (<) and an equal sign which is read less than or equal to 47.0; thus, it keeps average butyrate values less than 47.0 as well as ones that are 47.0. 
+
+Result3 is also FALSE because the data is subset to group by Semester, not participant_id. Thus, New_column (rather than new_column) will cotain the median Avg_butyrate number of each semester.> 
+
+### Question 5
+
+something about NAs
+
+The data frame (called breath_df) has the columns: "Participant_ID", "Study_week", "Semester", "Supplement_consumed", "Methane", "Hydrogen", "Carbon_dioxide". This data frame is used for the code below, explain what will happen to any NAs in each of the shown calculations, and how the NAs will effect the underlying data. [2 points]
+```{r eval=FALSE, include=FALSE}
+# Option 1
+breath_df %>%
+  filter(!is.na(Methane)) %>% 
+  group_by(Participant_ID, Study_week) %>%
+  summarize(Avg_methane = mean(Methane))
+
+# Option 2
+breath_df %>%
+  group_by(Participant_ID, Study_week) %>%
+  summarize(Avg_methane = mean(Methane, na.rm = TRUE))
+```
+
+<For option one, it is going to strip the entire row for any row that has an NA for a methane measurement, even if there are other variables with good measurements. Thus it will decrease the number of rows for the data set. However, it will calculate an arguably better mean in some cases because it will not factor in rows with NA for methane into the mean calculation so it will divide by "n" rows with methane measurements for each particpant in a given week, and not all rows for each participant in a given week. For example, if there are 6 rows for week 1 or participant 1, but 2 contain an NA, those rows will be removed and the mean will be divided by 4 rather than 6.
+
+Quite opposite, Option 2 will keep all the rows of data (same amount of rows as the original data set) but the mean will be calculated differently. Although the NAs are stripped from the data, so a mean can be calculated, the number of rows the mean is divided by remains the same; essentially the NA rows still affect the mean because if there are 6 rows with 2 NAs for the methane, the mean will still be divided by the 6 total rows.> 
+
+# Part 2 - tidy data 
+
+### Question 6
+
+Find the data frame matching your unique name in the GitHub repository. Find the breath gas and taxa abundance data frames. Download and import all into RStudio and use these data frames to complete the rest of the practical. Name the dataframe to match your uniqname, name the breath gas data frame "breath", name the taxa abundance data frame "taxa". [1 point]
+```{r}
+# data import code 
+woodbuse <- read_delim(file = "Raw_data/woodbuse.txt", 
+                        delim = "\t", col_names = TRUE, trim_ws = TRUE, na = c("NA"))
+
+breath <- read_delim(file = "Raw_data/breath.txt", 
+                        delim = "\t", col_names = TRUE, trim_ws = TRUE, na = c("NA"))
+
+taxa <- read_delim(file = "Raw_data/taxa.txt", 
+                        delim = "\t", col_names = TRUE, trim_ws = TRUE, na = c("NA"))
+
+View(woodbuse)
+View(breath)
+View(taxa)
+```
+
+Update column names in all files match the course conventions. [1 point]
+```{r}
+woodbuse <- rename_all(woodbuse, tolower)
+
+breath <- rename_all(breath, tolower)
+
+taxa <- rename_all(taxa, tolower)
+
+#Double check it worked
+View(woodbuse)
+View(breath)
+View(taxa)
+```
+
+View the supplement types in your semester. Are they all entered in the same style? If not update them to match. [1 point]
+```{r}
+woodbuse[["supplement_consumed"]] <- recode(.x=woodbuse[["supplement_consumed"]], "BRMPS&Accessible"="BRMPS+Accessible")
+
+View(woodbuse)
+```
+
+### Question 7
+
+What are the dimensions of each data frame? Write the results as a comment after the function. [1 point]
+```{r}
+dim(woodbuse) #472 Rows to 9 Columns
+dim(breath) #2668 Rows to 5 Columns
+dim(taxa) #46881 Rows to 6 Columns
+```
+
+Select a join that will drop as few data points as possible (full_join). Join the data frame containing the participant data (woodbuse) with the breath gas data (breath). Name this "joined_df". [1 point]
+```{r}
+joined_df <- full_join(woodbuse, breath)
+
+View(joined_df)
+```
+
+What are the dimensions of the joined data frame? Write the results as a comment after the function. [1 point]
+```{r}
+dim(joined_df) #3153 Rows to 11 Columns
+```
+
+### Question 8
+
+Calculate the total SCFAs. [1 point]
+```{r}
+woodbuse_total_scfa <- joined_df %>%
+  mutate(total_scfa = acetate_mmol_kg + butyrate_mmol_kg + propionate_mmol_kg)
+
+
+dim(woodbuse_total_scfa) #Added one row
+```
+
+Calculate the weekly mean of each SCFA of each participant. Calculate the weekly mean methane and hydrogen levels of each participant. [1 point]
+```{r}
+scfa_h2_ch4_wkly_mean <- joined_df %>%
+  group_by(participant_id, study_week, supplement_consumed, semester) %>%
+  summarize(wkly_mean_acetate = mean(acetate_mmol_kg, na.rm = TRUE), 
+            wkly_mean_butyrate = mean(butyrate_mmol_kg, na.rm = TRUE), 
+            wkly_mean_propionate = mean(propionate_mmol_kg, na.rm = TRUE),
+            wkly_mean_ch4 = mean(ch4, na.rm = TRUE), 
+            wkly_mean_h2 = mean(h2, na.rm = TRUE))
+View(scfa_h2_ch4_wkly_mean)
+```
+
+What are the dimensions of the data frame with the averages? Write the results as a comment after the function.
+```{r}
+dim(scfa_h2_ch4_wkly_mean) #1160 Rows to 9 Columns
+```
+
+Join this data frame with the one called "taxa". Name the new data frame "all_data". What are the dimensions of this new data frame? [1 point]
+```{r}
+all_data <- full_join(taxa, scfa_h2_ch4_wkly_mean)
+dim(all_data) #47139 Rows to 13 Columns
+```
+
+Save all data frames generated to your GitHub page. [1 point]
+```{r}
+#Updated Raw Data 
+write_delim(taxa, path = "curated_data/taxa.txt",
+            delim = "\t", na = "NA", col_names = TRUE)
+write_delim(woodbuse, path = "curated_data/woodbuse.txt",
+            delim = "\t", na = "NA", col_names = TRUE)
+write_delim(breath, path = "curated_data/breath.txt",
+            delim = "\t", na = "NA", col_names = TRUE)
+
+#Curated Data Sets
+write_delim(joined_df, path = "curated_data/joined_df.txt",
+            delim = "\t", na = "NA", col_names = TRUE)
+write_delim(woodbuse_total_scfa, path = "curated_data/woodbuse_total_scfa.txt",
+            delim = "\t", na = "NA", col_names = TRUE)
+write_delim(scfa_h2_ch4_wkly_mean, path = "curated_data/scfa_h2_ch4_wkly_mean.txt",
+            delim = "\t", na = "NA", col_names = TRUE)
+write_delim(all_data, path = "curated_data/all_data.txt",
+            delim = "\t", na = "NA", col_names = TRUE)
+```
+
+# Part 3 - statistics & graphics 
+
+Update all axes labels and figure titles so they are informative and easy to read. Upload final plots to GitHub. When specified, conduct the appropriate tests, and write the statistic (p, F, R value) as a comment. 
+
+### Question 9
+
+If you have more than one type of supplement consumed in your semester, filter for one type to answer Question 9. Plot each SCFA with the study week (weeks 1 and 3 only) on the x-axis. Make each study week a different color. Hint: you may have to use facets, or create individual plots and combine them into a multi-panelled figure. [3 points]
+```{r}
+#Butyrate
+but_brmps_plot <- scfa_h2_ch4_wkly_mean %>%
+  filter(study_week == "week1" | study_week == "week3",
+         supplement_consumed == "BRMPS") %>%
+  ggplot(aes(x = study_week, y = wkly_mean_butyrate, color = study_week)) + 
+  geom_violin() + 
+  geom_jitter() +
+  labs(title = "Mean Butyrate Concentrations between Study Weeks for BRMPS Supplement",
+         x = "Study Week",
+         y = "Mean Butyrate Concentration (mmol/kg)")  +
+  theme(legend.position = "none")
+but_brmps_plot #View Plot
+
+save_plot(filename = "figures/but_brmps_plot.pdf", plot = but_brmps_plot)
+
+
+#Acetate
+ace_brmps_plot <- scfa_h2_ch4_wkly_mean %>%
+  filter(study_week == "week1" | study_week == "week3",
+         supplement_consumed == "BRMPS") %>%
+  ggplot(aes(x = study_week, y = wkly_mean_acetate, color = study_week)) + 
+  geom_violin() + 
+  geom_jitter() +
+  labs(title = "Mean Acetate Concentrations between Study Weeks for BRMPS Supplement",
+         x = "Study Week",
+         y = "Mean Acetate Concentration (mmol/kg)")  +
+  theme(legend.position = "none")
+ace_brmps_plot #View Plot
+
+save_plot(filename = "figures/ace_brmps_plot.pdf", plot = ace_brmps_plot)
+
+#Propionate
+pro_brmps_plot <- scfa_h2_ch4_wkly_mean %>%
+  filter(study_week == "week1" | study_week == "week3",
+         supplement_consumed == "BRMPS") %>%
+  ggplot(aes(x = study_week, y = wkly_mean_propionate, color = study_week)) + 
+  geom_violin() + 
+  geom_jitter() +
+  labs(title = "Mean Propionate Concentrations between Study Weeks for BRMPS Supplement",
+         x = "Study Week",
+         y = "Mean Propionate Concentration (mmol/kg)")  +
+  theme(legend.position = "none")
+pro_brmps_plot #View Plot
+
+save_plot(filename = "figures/pro_brmps_plot.pdf", plot = pro_brmps_plot)
+
+plot_grid_scfa <- plot_grid(pro_brmps_plot, ace_brmps_plot, but_brmps_plot, 
+          labels = c("Mean SCFA Concentration for BRMPS"),
+          nrow = 1, ncol = 3)
+
+save_plot(filename = "figures/plot_grid_scfa.pdf", plot = plot_grid_scfa)
+
+```
+
+Based on the data presented in the plot you generated above, identify which statistical test you would need to determine if there was a change in SCFA concentration between weeks 1 and 3 of the study. Check the assumptions appropriate for the test. [3 points]
+```{r}
+#Initial Assumptions:
+scfa_h2_ch4_wkly_mean %>%
+  filter(supplement_consumed == "BRMPS" & study_week != "week5") %>% 
+  group_by(study_week) %>% 
+  summarise(sample_size = n())
+
+bartlett.test(wkly_mean_propionate ~ study_week, data = scfa_h2_ch4_wkly_mean) # .003132
+bartlett.test(wkly_mean_acetate ~ study_week, data = scfa_h2_ch4_wkly_mean) # .2155
+bartlett.test(wkly_mean_butyrate ~ study_week, data = scfa_h2_ch4_wkly_mean) # .1008
+
+#Assumptions/Test for Butyrate
+#Assumptions
+wk1_but <- scfa_h2_ch4_wkly_mean %>%
+  filter(study_week == "week1", 
+         supplement_consumed == "BRMPS") %>%
+  rename(wk1_mean_but = "wkly_mean_butyrate")
+shapiro.test(wk1_but$wk1_mean_but) # p-value .1005
+ggplot(wk1_but, aes(x = wk1_mean_but)) + geom_histogram()
+
+wk3_but <- scfa_h2_ch4_wkly_mean %>%
+  filter(study_week == "week3", 
+         supplement_consumed == "BRMPS") %>%
+  rename(wk3_mean_but = "wkly_mean_butyrate")
+shapiro.test(wk3_but$wk3_mean_but) #p-value .03128
+ggplot(wk3_but, aes(x = wk3_mean_but)) + geom_histogram()
+
+# join these data frames back together
+x1_df <- inner_join(x = wk1_but, y = wk3_but,
+                    by = c("participant_id", 
+                           "semester", "supplement_consumed")) 
+#Test
+t.test(x = x1_df$wk3_mean_but, 
+            y = x1_df$wk1_mean_but, 
+            alternative = "greater", paired = TRUE) #p-value: .1094
+
+#Assumptions/Test for Acetate
+#Assumptions
+wk1_ace <- scfa_h2_ch4_wkly_mean %>%
+  filter(study_week == "week1", 
+         supplement_consumed == "BRMPS") %>%
+  rename(wk1_mean_ace = "wkly_mean_acetate")
+shapiro.test(wk1_ace$wk1_mean_ace) #p-value: .004085
+ggplot(wk1_ace, aes(x = wk1_mean_ace)) + geom_histogram()
+
+wk3_ace <- scfa_h2_ch4_wkly_mean %>%
+  filter(study_week == "week3", 
+         supplement_consumed == "BRMPS") %>%
+  rename(wk3_mean_ace = "wkly_mean_acetate")
+shapiro.test(wk3_ace$wk3_mean_ace) #p-value: .02261
+ggplot(wk3_ace, aes(x = wk3_mean_ace)) + geom_histogram()
+
+# join these data frames back together
+x2_df <- inner_join(x = wk1_ace, y = wk3_ace,
+                    by = c("participant_id", 
+                           "semester", "supplement_consumed")) 
+#Test
+t.test(x = x2_df$wk3_mean_ace, 
+            y = x1_df$wk1_mean_ace, 
+            alternative = "greater", paired = FALSE) #p-value: 2.502e-08
+
+#Assumptions/Test for Propionate
+#Assumptions
+wk1_pro <- scfa_h2_ch4_wkly_mean %>%
+  filter(study_week == "week1", 
+         supplement_consumed == "BRMPS") %>%
+  rename(wk1_mean_pro = "wkly_mean_propionate")
+shapiro.test(wk1_pro$wk1_mean_pro) #p-value:.1037
+ggplot(wk1_pro, aes(x = wk1_mean_pro)) + geom_histogram()
+
+wk3_pro <- scfa_h2_ch4_wkly_mean %>%
+  filter(study_week == "week3", 
+         supplement_consumed == "BRMPS") %>%
+  rename(wk3_mean_pro = "wkly_mean_propionate")
+shapiro.test(wk3_pro$wk3_mean_pro) #p-value: .0005081
+ggplot(wk3_pro, aes(x = wk3_mean_pro)) + geom_histogram()
+
+# join these data frames back together
+x3_df <- inner_join(x = wk1_pro, y = wk3_pro,
+                    by = c("participant_id", 
+                           "semester", "supplement_consumed")) 
+#Test
+t.test(x = x3_df$wk3_mean_pro, 
+            y = x3_df$wk1_mean_pro, 
+            alternative = "greater", paired = TRUE) #p-value: .1028
+```
+
+Based on the results of the test, conclude if there was a difference in SCFAs between weeks. 
+
+<The first condition, a large sample size, was not fully satisfied as both sample sizes of both weeks was less than 30, however it was made up for in the various shapiro tests the p-values were all about .10 or lower meaning it was reasonable to assume them to be about normal. Additionally, 2/3 had equal variences, but that did not change much besides some minor calculations in the test. Having our conditions approximately satisfied, I believed it to be reasonable to calculate the p-values for these SCFA and found that they are all significant if alpha is equal to about .1. 2 P-values were a lot higher and closer (Butyrate and Propionate) than acetate so although it is reasonable to assume all SCFA increased in concentration from week 1 to week 3, Acetate had a more significant increase.> 
+
+### Question 10
+
+Is there a correlation between the abundace of hydrogen generators and breath hydrogen? Create a plot that shows the relationship and conduct the appropriate statistical test(s). [2 points]
+```{r}
+# plot
+h2_gen_vs_breath_h2 <- all_data %>%
+  filter(category == "hydrogen_gen", #subset dataframe to Hydrogen Generators
+         study_week == "week3") %>% #subset for week3
+  ggplot(aes(x = fract,
+             y = wkly_mean_h2)) + 
+  geom_point() + #puts data points to match x and y coordinates
+  geom_smooth(method = "lm", #used to create a linear best fit line
+              se = TRUE) + #hides confidence interval around line 
+labs(title = "Abundance of H2 Generators Affecting H2 Breath Concentration (Week 3)",
+       x = "Abundance of Hydrogen Generators",
+       y ="H2 Concentration") 
+h2_gen_vs_breath_h2
+
+save_plot(filename = "figures/h2_gen_vs_breath_h2.pdf", plot = h2_gen_vs_breath_h2)
+
+
+# test
+h2_gen_vs_breath_h2_test <- all_data %>%
+  lm(fract ~ wkly_mean_h2, data = .) 
+summary(h2_gen_vs_breath_h2_test)  
+
+# result? 
+```
+
+What can you conclude from these results?
+
+<The p-value (.3109) is very high indicating that it is not appropriate to conduct a linear test, however if we proceed we see that the adjusted R-squared is 8.683e-07 which is extremely small confirming that there does not appear to be a direct relationship between these variables. If in fact there was a relationship, the graph and correlation tell us that it would be an opposite relationship, as when the abundance of H2 Generators increases the H2 concentration decreases, but this is only theoretical as our data tells us that there is most likely no direct relationship.> 
+
+Is there a correlation between the abundace of hydrogen consumers and breath methane? Create a plot that shows the relationship and conduct the appropriate statistical test(s). [2 points]
+```{r}
+# plot
+h2_gen_vs_breath_ch4 <- all_data %>%
+  filter(category == "hydrogen_gen", #subset dataframe to Hydrogen Generators
+         study_week == "week3") %>% #subset for week3
+  ggplot(aes(x = fract,
+             y = wkly_mean_ch4)) + 
+  geom_point() + #puts data points to match x and y coordinates
+  geom_smooth(method = "lm", #used to create a linear best fit line
+              se = TRUE) + #hides confidence interval around line 
+labs(title = "Abundance of H2 Generators Affecting CH4 Breath Concentration (Week 3)",
+       x = "Abundance of Hydrogen Generators",
+       y ="CH4 Concentration") 
+h2_gen_vs_breath_ch4
+
+save_plot(filename = "figures/h2_gen_vs_breath_ch4.pdf", plot = h2_gen_vs_breath_ch4)
+
+
+# test
+h2_gen_vs_breath_ch4_test <- all_data %>%
+  lm(fract ~ wkly_mean_ch4, data = .) 
+summary(h2_gen_vs_breath_ch4_test)  
+
+# result?
+```
+
+What can you conclude from these results?
+
+<We are dealing with an incredibly small p-value here (2.267e-10) so it is okay to proceed with the linear regression test. If there was a relationship, the R value indicates that it is an opposite relationship between hydrogen gen. abundance and H2 production, but our adjusted R-squared Value (.001262) or coefficient of determination is so small that it suggests there is practically no direct linear relationship between H2 produced and H2 generators. > 
+
+### Extra credit:
+
+Is the abundace of hydrogen producers and consumers related? Create a plot, check assumptions, conduct the appropriate statistical test(s), and interpret the results. [1 point]
+```{r}
+# plot
+h2_gen <- taxa %>%
+  select(participant_id, study_week, fract, category) %>%
+  filter(category == "hydrogen_gen" ) %>% #subset dataframe to Hydrogen Generators
+  rename(h2_gen_abundance = "fract") %>%
+  select(h2_gen_abundance, participant_id)
+         
+h2_consume <- taxa %>%
+  select(participant_id, fract, category, study_week) %>%
+  filter(category == "hydrogen_consumers") %>% #subset dataframe to Hydrogen Generators
+  rename(h2_con_abundance = "fract") %>%
+  select(h2_con_abundance, participant_id)
+
+new_taxa <- full_join(h2_consume, h2_gen)
+
+h2_gen_vs_h2_consume <- new_taxa %>%
+  ggplot(aes(x = h2_gen_abundance,
+             y = h2_con_abundance)) + 
+  geom_point() + #puts data points to match x and y coordinates
+  geom_smooth(method = "lm", #used to create a linear best fit line
+              se = TRUE) + 
+labs(title = "Abundance of H2 Generators Affecting H2 Consumers",
+       x = "Abundance of Hydrogen Generators",
+       y ="H2 Consumer Abundance") 
+h2_gen_vs_h2_consume
+
+# test
+h2_gen_vs_h2_consume_test <- all_data %>%
+  lm(fract ~ wkly_mean_ch4, data = .) 
+summary(h2_gen_vs_breath_ch4_test)  
+
+
+h2_gen
+h2_consume
+new_taxa
+```
+
+<The p-value is very small (2.267e-10) so it is reasonable to run this test. The graph and line of best fit shows a negative relationship between the two species as one increases the other decreases, but the adjusted R-squared is extremely small (.001262) so instead this relationship is best not interpretted as direct (linear) but instead nonlinear.> 
+
+
+-----
+end
